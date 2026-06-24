@@ -473,7 +473,7 @@
         const d = await r.json();
         const badge = document.getElementById('perf-badge');
         if (d.fps_swap > 0) {
-          badge.textContent = `swap ${d.fps_swap} FPS  |  display ${d.fps_display} FPS`;
+          badge.textContent = `tracking ${d.fps_swap} FPS  |  neural ${d.fps_neural || 0} FPS`;
         }
       } catch {}
     }, 2000);

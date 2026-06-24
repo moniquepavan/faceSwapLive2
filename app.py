@@ -5,61 +5,64 @@ import time
 from flask import Flask, Response, render_template, request, jsonify
 from face_swap import FaceSwapper
 
-app = Flask(__name__)
+app     = Flask(__name__)
 swapper = FaceSwapper()
 
 # ── Estado compartilhado ────────────────────────────────────────────────────
-_camera = None
+_camera      = None
 _camera_lock = threading.Lock()
-_streaming = False
+_streaming   = False
 
-# Fila de frames brutos (maxsize=1 → sempre processa o mais recente)
+# Fila de frames brutos para o swap thread (maxsize=1 = sempre o mais recente)
 _raw_q: queue.Queue = queue.Queue(maxsize=1)
 
-# Frame mais recente para exibição (processado ou bruto como fallback)
+# Frame exibido no MJPEG (atualizado por ambos os threads)
 _display_frame = None
-_display_lock = threading.Lock()
+_display_lock  = threading.Lock()
 
-# Métricas
-_fps_swap = 0.0
+# Metricas
+_fps_swap    = 0.0
 _fps_display = 0.0
 
 
-# ── Thread de captura ────────────────────────────────────────────────────────
+# ── Thread de captura ─────────────────────────────────────────────────────────
+# Roda a ~25 FPS. Faz composite_fast (~35ms) para manter o display fluido
+# entre os swaps neurais, depois alimenta o swap thread com o frame bruto.
 def _capture_loop():
-    global _streaming
+    global _streaming, _display_frame
+
     while _streaming:
         with _camera_lock:
             cam = _camera
         if cam is None:
             break
+
         ret, frame = cam.read()
         if not ret:
             time.sleep(0.02)
             continue
 
-        # Reduz para processamento (~2x mais rápido que 640x480)
-        small = cv2.resize(frame, (480, 360))
+        # Composite rapido: reloca ultimo swap sem neural inference (~35ms)
+        composited = swapper.composite_fast(frame)
 
-        # Descarta frame antigo se a thread de swap ainda não consumiu
+        with _display_lock:
+            _display_frame = composited
+
+        # Alimenta o swap thread
         try:
-            _raw_q.put_nowait(small)
+            _raw_q.put_nowait(frame)
         except queue.Full:
             pass
 
-        # Fallback: enquanto não tem resultado do swap, mostra câmera ao vivo
-        with _display_lock:
-            global _display_frame
-            if _display_frame is None:
-                _display_frame = small
 
-        time.sleep(0.01)
-
-
-# ── Thread de swap (roda em background, sem bloquear câmera) ─────────────────
+# ── Thread de swap (neural inference, ~840ms/frame) ─────────────────────────
+# Roda inswapper completo e sobrescreve _display_frame com resultado de
+# alta qualidade. O capture thread vai continuar fazendo composite_fast
+# enquanto este thread processa.
 def _swap_loop():
-    global _fps_swap
-    t0 = time.time()
+    global _fps_swap, _display_frame
+
+    t0    = time.time()
     count = 0
 
     while _streaming:
@@ -68,11 +71,11 @@ def _swap_loop():
         except queue.Empty:
             continue
 
-        processed = swapper.process_frame(frame)
+        # Swap completo com paste_back=True (qualidade maxima do insightface)
+        result = swapper.process_frame(frame)
 
         with _display_lock:
-            global _display_frame
-            _display_frame = processed
+            _display_frame = result
 
         count += 1
         elapsed = time.time() - t0
@@ -82,10 +85,11 @@ def _swap_loop():
             t0 = time.time()
 
 
-# ── Gerador MJPEG ────────────────────────────────────────────────────────────
+# ── Gerador MJPEG ─────────────────────────────────────────────────────────────
 def _gen_mjpeg():
     global _fps_display
-    t0 = time.time()
+
+    t0    = time.time()
     count = 0
 
     while True:
@@ -96,14 +100,12 @@ def _gen_mjpeg():
             time.sleep(0.04)
             continue
 
-        ret, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        ret, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ret:
             continue
 
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n"
-        )
+        yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+               + buf.tobytes() + b"\r\n")
 
         count += 1
         elapsed = time.time() - t0
@@ -112,10 +114,10 @@ def _gen_mjpeg():
             count = 0
             t0 = time.time()
 
-        time.sleep(0.033)  # ~30 FPS no display (independente do swap)
+        time.sleep(0.033)
 
 
-# ── Rotas ────────────────────────────────────────────────────────────────────
+# ── Rotas ─────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -124,9 +126,9 @@ def index():
 @app.route("/status")
 def status():
     return jsonify({
-        "status": swapper.get_status(),
-        "ready": swapper.ready,
-        "fps_swap": _fps_swap,
+        "status":      swapper.get_status(),
+        "ready":       swapper.ready,
+        "fps_swap":    _fps_swap,
         "fps_display": _fps_display,
     })
 
@@ -153,7 +155,7 @@ def start_camera():
     with _camera_lock:
         if _camera is None:
             _camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            _camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            _camera.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
             _camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             _camera.set(cv2.CAP_PROP_FPS, 30)
 
@@ -162,9 +164,9 @@ def start_camera():
             return jsonify({"ok": False, "msg": "Webcam nao encontrada."}), 500
 
     _display_frame = None
-    _streaming = True
+    _streaming     = True
     threading.Thread(target=_capture_loop, daemon=True).start()
-    threading.Thread(target=_swap_loop, daemon=True).start()
+    threading.Thread(target=_swap_loop,    daemon=True).start()
     return jsonify({"ok": True})
 
 
