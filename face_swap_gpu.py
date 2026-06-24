@@ -31,19 +31,12 @@ class FaceSwapperGPU:
 
     def _load(self):
         try:
-            self.status = "Carregando detector (CPU)..."
+            # buffalo_l faz detecção + reconhecimento e auto-baixa os modelos
+            self.status = "Baixando/carregando buffalo_l (detector + reconhecimento)..."
             self.analyzer = FaceAnalysis(
                 name="buffalo_l", providers=_CPU_PROVIDERS
             )
             self.analyzer.prepare(ctx_id=0, det_size=(640, 640))
-
-            self.status = "Carregando detector rapido (CPU)..."
-            self.fast_det = insightface.model_zoo.get_model(
-                os.path.join(os.path.expanduser("~"), ".insightface",
-                             "models", "buffalo_sc", "det_500m.onnx"),
-                providers=_CPU_PROVIDERS
-            )
-            self.fast_det.prepare(ctx_id=0, input_size=(320, 320), det_thresh=0.5)
 
             self.status = "Carregando inswapper na GPU (CUDA)..."
             self.swapper = insightface.model_zoo.get_model(
@@ -104,13 +97,13 @@ class FaceSwapperGPU:
             source = self.source_face
 
         try:
-            _, kps_all = self.fast_det.detect(frame, max_num=1)
-            if kps_all is None or not len(kps_all):
+            faces = self.analyzer.get(frame)
+            if not faces:
                 return frame
+            target = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
         except Exception:
             return frame
 
-        target = _Face(kps_all[0])
         try:
             return self.swapper.get(frame, target, source, paste_back=True)
         except Exception as e:
