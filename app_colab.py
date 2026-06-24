@@ -1,7 +1,10 @@
 """
 Servidor Flask para rodar no Google Colab com GPU.
-Usa Socket.IO para receber frames do browser e devolver o resultado.
+Usa Socket.IO + eventlet para receber frames do browser e devolver o resultado.
 """
+import eventlet
+eventlet.monkey_patch()   # precisa vir antes de qualquer import de rede
+
 import os
 import base64
 import cv2
@@ -12,8 +15,14 @@ from face_swap_gpu import FaceSwapperGPU
 
 app       = Flask(__name__)
 app.config["SECRET_KEY"] = "faceswaplive2"
-socketio  = SocketIO(app, cors_allowed_origins="*", async_mode="threading",
-                     max_http_buffer_size=5 * 1024 * 1024)   # 5 MB por frame
+socketio  = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet",
+    max_http_buffer_size=5 * 1024 * 1024,   # 5 MB por frame
+    ping_timeout=60,
+    ping_interval=25,
+)
 swapper   = FaceSwapperGPU()
 
 

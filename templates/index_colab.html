@@ -237,14 +237,21 @@
 </main>
 
 <script>
-  const socket = io({ transports: ['websocket'] });
+  // Deixa Socket.IO escolher o melhor transporte (polling → websocket)
+  const socket = io();
 
-  // ── Status ────────────────────────────────────────────────────────────
+  // Indicador de conexão
+  const statusBar = document.getElementById('status-bar');
+  socket.on('connect',    () => { statusBar.style.color = '#4ade80'; statusBar.textContent = 'Conectado ao servidor'; });
+  socket.on('disconnect', () => { statusBar.style.color = '#f87171'; statusBar.textContent = 'Desconectado'; });
+  socket.on('connect_error', e => { statusBar.style.color = '#f87171'; statusBar.textContent = 'Erro de conexao: ' + e.message; });
+
+  // ── Status do modelo ──────────────────────────────────────────────────
   let modelReady = false;
   async function pollStatus() {
     try {
       const d = await (await fetch('/status')).json();
-      document.getElementById('status-bar').textContent = d.status;
+      if (!socket.connected) statusBar.textContent = d.status;
       modelReady = d.ready;
     } catch {}
   }
@@ -326,13 +333,19 @@
   const output  = document.getElementById('output');
   const placeholder = document.getElementById('placeholder-out');
 
-  let waitingResult = false;
-  let frameCount    = 0;
-  let fpsT0         = performance.now();
+  let waitingResult  = false;
+  let waitingSince   = 0;
+  const TIMEOUT_MS   = 5000;   // desbloqueia se servidor não responder em 5s
+  let frameCount     = 0;
+  let fpsT0          = performance.now();
 
   function sendLoop() {
     if (!streaming) return;
-    if (!waitingResult) captureAndSend();
+    // Destrava se servidor demorar demais (ex: modelo ainda carregando)
+    if (waitingResult && (performance.now() - waitingSince) > TIMEOUT_MS) {
+      waitingResult = false;
+    }
+    if (!waitingResult && socket.connected) captureAndSend();
     requestAnimationFrame(sendLoop);
   }
 
@@ -342,6 +355,7 @@
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const data = canvas.toDataURL('image/jpeg', 0.75);
     waitingResult = true;
+    waitingSince  = performance.now();
     socket.emit('frame', data);
   }
 
