@@ -1,6 +1,5 @@
 """
 Versao GPU do FaceSwapper — usada no Google Colab com CUDA.
-Processa em resolucao completa, roda swap em todo frame (sem tracking).
 """
 import os
 import cv2
@@ -11,37 +10,30 @@ from insightface.app import FaceAnalysis
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "inswapper_128.onnx")
 
-_SWAP_PROVIDERS = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-_CPU_PROVIDERS  = ["CPUExecutionProvider"]
+_PROVIDERS = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
-
-class _Face:
-    __slots__ = ("kps",)
-    def __init__(self, kps):
-        self.kps = kps
+_DETECT_EVERY = 2   # roda deteccao a cada N frames; entre eles reutiliza ultimo rosto
 
 
 class FaceSwapperGPU:
     def __init__(self):
-        self.source_face = None
-        self._lock       = threading.Lock()
-        self.ready       = False
-        self.status      = "Carregando modelos..."
+        self.source_face  = None
+        self._lock        = threading.Lock()
+        self.ready        = False
+        self.status       = "Carregando modelos..."
+        self._last_face   = None
+        self._frame_n     = 0
         threading.Thread(target=self._load, daemon=True).start()
 
     def _load(self):
         try:
-            # buffalo_l faz detecção + reconhecimento e auto-baixa os modelos
-            self.status = "Baixando/carregando buffalo_l (detector + reconhecimento)..."
-            self.analyzer = FaceAnalysis(
-                name="buffalo_l", providers=_CPU_PROVIDERS
-            )
-            self.analyzer.prepare(ctx_id=0, det_size=(640, 640))
+            self.status = "Baixando/carregando buffalo_l..."
+            # Detector na GPU — maior ganho de velocidade
+            self.analyzer = FaceAnalysis(name="buffalo_l", providers=_PROVIDERS)
+            self.analyzer.prepare(ctx_id=0, det_size=(320, 320))  # 320 e rapido o suficiente
 
             self.status = "Carregando inswapper na GPU (CUDA)..."
-            self.swapper = insightface.model_zoo.get_model(
-                MODEL_PATH, providers=_SWAP_PROVIDERS
-            )
+            self.swapper = insightface.model_zoo.get_model(MODEL_PATH, providers=_PROVIDERS)
 
             self.status = "Warmup CUDA..."
             self._warmup()
@@ -84,28 +76,38 @@ class FaceSwapperGPU:
 
     def clear_source(self):
         with self._lock:
-            self.source_face = None
+            self.source_face  = None
+            self._last_face   = None
+            self._frame_n     = 0
 
     def get_status(self):
         return self.status
 
     def process_frame(self, frame):
-        """Roda o swap completo em cada frame. ~30ms na GPU T4."""
         with self._lock:
             if not self.ready or self.source_face is None:
                 return frame
             source = self.source_face
 
-        try:
-            faces = self.analyzer.get(frame)
-            if not faces:
-                return frame
-            target = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
-        except Exception:
+        self._frame_n += 1
+
+        # Detecta a cada _DETECT_EVERY frames; nos demais reutiliza ultimo rosto
+        if self._frame_n % _DETECT_EVERY == 0 or self._last_face is None:
+            try:
+                faces = self.analyzer.get(frame)
+                if faces:
+                    self._last_face = max(
+                        faces,
+                        key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1])
+                    )
+            except Exception:
+                pass
+
+        if self._last_face is None:
             return frame
 
         try:
-            return self.swapper.get(frame, target, source, paste_back=True)
+            return self.swapper.get(frame, self._last_face, source, paste_back=True)
         except Exception as e:
             print(f"[swap] {e}")
             return frame
