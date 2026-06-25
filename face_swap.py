@@ -14,9 +14,16 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "inswapper_128.on
 _DET_PATH  = os.path.join(os.path.expanduser("~"), ".insightface", "models",
                            "buffalo_sc", "det_500m.onnx")
 
-# Providers: DirectML usa Intel UHD via DirectX 12, cai pra CPU se não suportado
-_SWAP_PROVIDERS = ["DmlExecutionProvider", "CPUExecutionProvider"]
-_CPU_PROVIDERS  = ["CPUExecutionProvider"]
+_CPU_PROVIDERS = ["CPUExecutionProvider"]
+
+def _best_providers():
+    available = ort.get_available_providers()
+    for p in ["CUDAExecutionProvider", "DmlExecutionProvider"]:
+        if p in available:
+            return [p, "CPUExecutionProvider"]
+    return _CPU_PROVIDERS
+
+_SWAP_PROVIDERS = _best_providers()
 
 _PROC_W, _PROC_H = 320, 240
 
@@ -54,18 +61,21 @@ class FaceSwapper:
             self.source_analyzer = FaceAnalysis(name="buffalo_l", providers=_CPU_PROVIDERS)
             self.source_analyzer.prepare(ctx_id=0, det_size=(320, 320))
 
-            # inswapper via DirectML (Intel UHD) → ~2x mais rápido que CPU
-            self.status = "Carregando inswapper (DirectML / Intel UHD)..."
+            self.status = f"Carregando inswapper ({_SWAP_PROVIDERS[0]})..."
             self.swapper = insightface.model_zoo.get_model(
                 MODEL_PATH, providers=_SWAP_PROVIDERS
             )
 
-            # Warmup — DirectML compila shaders na 1ª inferência
-            self.status = "Compilando shaders GPU (warmup, 20s)..."
+            self.status = "Warmup GPU (aguarde ~20s)..."
             self._warmup()
 
             used = self.swapper.session.get_providers()
-            gpu  = "Intel GPU (DirectML)" if "DmlExecutionProvider" in used else "CPU fallback"
+            if "CUDAExecutionProvider" in used:
+                gpu = "NVIDIA GPU (CUDA)"
+            elif "DmlExecutionProvider" in used:
+                gpu = "Intel/AMD GPU (DirectML)"
+            else:
+                gpu = "CPU"
             self.ready  = True
             self.status = f"Pronto! [{gpu}] Faca upload de um rosto."
         except Exception as e:
