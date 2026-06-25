@@ -105,16 +105,14 @@ faceSwapLive2/
 
 ## Observações de performance
 
-| Hardware | FPS exibido | FPS neural |
-|---|---|---|
-| CPU apenas | ~15 FPS | ~0.5 FPS |
-| GPU integrada Intel (DirectML) | ~18 FPS | ~1 FPS |
-| GPU NVIDIA GTX 1060 | ~30 FPS | ~15 FPS |
-| GPU NVIDIA RTX série | ~30 FPS | ~30–60 FPS |
+| Hardware | FPS do swap |
+|---|---|
+| CPU apenas | ~0.5 FPS |
+| GPU integrada Intel (DirectML) | ~1 FPS |
+| GPU NVIDIA GTX 1060 | ~15 FPS |
+| GPU NVIDIA RTX série | ~30–60 FPS |
 
-O app usa duas threads separadas:
-- **Thread de tracking** (rápida): detecta a posição do rosto e reposiciona o último swap a cada frame (~40ms). Isso mantém o rosto sempre alinhado mesmo entre atualizações neurais.
-- **Thread neural** (lenta): roda o modelo inswapper em background e atualiza a textura do rosto trocado com a frequência que o hardware permite.
+O vídeo da webcam sempre roda a ~26 FPS independente do hardware. O swap acontece em background e atualiza o rosto conforme a velocidade do hardware permite.
 
 Se tiver GPU NVIDIA, instale o `onnxruntime-gpu` no lugar do `onnxruntime`:
 ```bash
