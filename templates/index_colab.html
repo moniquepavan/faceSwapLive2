@@ -7,163 +7,51 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background:#0f0f13; color:#e8e8ee; font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; }
 
-  body {
-    background: #0f0f13;
-    color: #e8e8ee;
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
+  header { padding:14px 24px; background:#16161e; border-bottom:1px solid #2a2a38; display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:1.2rem; font-weight:600; background:linear-gradient(135deg,#a78bfa,#34d399); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  #status-bar { font-size:.75rem; color:#888; margin-left:auto; padding:4px 10px; background:#1e1e2a; border-radius:20px; border:1px solid #2a2a38; }
+  .gpu-badge { font-size:.7rem; background:#1a3a2a; color:#34d399; border:1px solid #166534; border-radius:20px; padding:3px 8px; font-weight:600; }
 
-  header {
-    padding: 14px 24px;
-    background: #16161e;
-    border-bottom: 1px solid #2a2a38;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  header h1 {
-    font-size: 1.2rem;
-    font-weight: 600;
-    background: linear-gradient(135deg, #a78bfa, #34d399);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  #status-bar {
-    font-size: 0.75rem;
-    color: #888;
-    margin-left: auto;
-    padding: 4px 10px;
-    background: #1e1e2a;
-    border-radius: 20px;
-    border: 1px solid #2a2a38;
-  }
-  .gpu-badge {
-    font-size: 0.7rem;
-    background: #1a3a2a;
-    color: #34d399;
-    border: 1px solid #166534;
-    border-radius: 20px;
-    padding: 3px 8px;
-    font-weight: 600;
-  }
+  main { flex:1; display:grid; grid-template-columns:260px 1fr 1fr; gap:16px; padding:16px; max-width:1300px; margin:0 auto; width:100%; }
 
-  main {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 280px 1fr 1fr;
-    gap: 16px;
-    padding: 16px;
-    max-width: 1300px;
-    margin: 0 auto;
-    width: 100%;
-  }
+  .card { background:#16161e; border:1px solid #2a2a38; border-radius:12px; padding:14px; }
+  .card h2 { font-size:.8rem; font-weight:600; color:#a78bfa; text-transform:uppercase; letter-spacing:.08em; margin-bottom:10px; }
+  .panel { display:flex; flex-direction:column; gap:12px; }
 
-  .card {
-    background: #16161e;
-    border: 1px solid #2a2a38;
-    border-radius: 12px;
-    padding: 14px;
-  }
-  .card h2 {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #a78bfa;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 10px;
-  }
+  #drop-zone { border:2px dashed #3a3a50; border-radius:10px; padding:20px 12px; text-align:center; cursor:pointer; transition:.2s; }
+  #drop-zone:hover, #drop-zone.drag-over { border-color:#a78bfa; background:#1e1e2e; }
+  #drop-zone p { font-size:.8rem; color:#666; line-height:1.5; }
+  #drop-zone .icon { font-size:1.8rem; margin-bottom:6px; }
+  #file-input { display:none; }
 
-  /* ── Painel esquerdo ── */
-  .panel { display: flex; flex-direction: column; gap: 12px; }
+  #face-preview { display:none; flex-direction:column; align-items:center; gap:6px; margin-top:10px; }
+  #face-preview img { width:100%; max-height:150px; object-fit:cover; border-radius:8px; border:2px solid #a78bfa44; }
+  #upload-msg { font-size:.78rem; padding:5px 8px; border-radius:6px; margin-top:6px; display:none; }
+  #upload-msg.ok  { background:#1a3a2a; color:#4ade80; border:1px solid #166534; }
+  #upload-msg.err { background:#3a1a1a; color:#f87171; border:1px solid #7f1d1d; }
 
-  #drop-zone {
-    border: 2px dashed #3a3a50;
-    border-radius: 10px;
-    padding: 20px 12px;
-    text-align: center;
-    cursor: pointer;
-    transition: 0.2s;
-  }
-  #drop-zone:hover, #drop-zone.drag-over { border-color: #a78bfa; background: #1e1e2e; }
-  #drop-zone p { font-size: 0.8rem; color: #666; line-height: 1.5; }
-  #drop-zone .icon { font-size: 1.8rem; margin-bottom: 6px; }
-  #file-input { display: none; }
+  .btn { width:100%; padding:10px; border:none; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; transition:.2s; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .btn-primary { background:linear-gradient(135deg,#7c3aed,#4f46e5); color:#fff; }
+  .btn-primary:hover:not(:disabled) { filter:brightness(1.15); }
+  .btn-danger { background:#2a1a1a; color:#f87171; border:1px solid #7f1d1d; margin-top:6px; }
+  .btn-danger:hover:not(:disabled) { background:#3a2020; }
 
-  #face-preview { display: none; flex-direction: column; align-items: center; gap: 6px; margin-top: 10px; }
-  #face-preview img { width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; border: 2px solid #a78bfa44; }
-  #upload-msg { font-size: 0.78rem; padding: 5px 8px; border-radius: 6px; margin-top: 6px; display: none; }
-  #upload-msg.ok  { background: #1a3a2a; color: #4ade80; border: 1px solid #166534; }
-  #upload-msg.err { background: #3a1a1a; color: #f87171; border: 1px solid #7f1d1d; }
+  .video-wrap { background:#16161e; border:1px solid #2a2a38; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  .video-header { padding:10px 14px; border-bottom:1px solid #2a2a38; font-size:.82rem; font-weight:600; color:#888; display:flex; align-items:center; gap:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#3a3a50; transition:.3s; }
+  .dot.live { background:#4ade80; box-shadow:0 0 6px #4ade8088; }
 
-  .btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 0.85rem;
-    font-weight: 600; cursor: pointer; transition: 0.2s; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-primary { background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff; }
-  .btn-primary:hover:not(:disabled) { filter: brightness(1.15); }
-  .btn-danger { background: #2a1a1a; color: #f87171; border: 1px solid #7f1d1d; margin-top: 6px; }
-  .btn-danger:hover:not(:disabled) { background: #3a2020; }
+  .video-body { flex:1; background:#0a0a10; display:flex; align-items:center; justify-content:center; min-height:340px; position:relative; }
+  .video-body video, .video-body img { width:100%; height:100%; object-fit:contain; }
+  canvas { display:none; }
 
-  /* ── Video panels ── */
-  .video-wrap {
-    background: #16161e;
-    border: 1px solid #2a2a38;
-    border-radius: 12px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
-  .video-header {
-    padding: 10px 14px;
-    border-bottom: 1px solid #2a2a38;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #888;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #3a3a50; transition: 0.3s; }
-  .dot.live { background: #4ade80; box-shadow: 0 0 6px #4ade8088; }
-
-  .video-body {
-    flex: 1;
-    background: #0a0a10;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 360px;
-    position: relative;
-  }
-  .video-body video, .video-body img, .video-body canvas {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-  .video-body canvas { display: none; }
-
-  #perf-badge {
-    position: absolute;
-    bottom: 8px;
-    right: 8px;
-    background: #00000099;
-    color: #34d399;
-    font-size: 0.7rem;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-weight: 600;
-    display: none;
-  }
-
-  #placeholder-out {
-    text-align: center;
-    color: #444;
-  }
-  #placeholder-out .big { font-size: 2.5rem; margin-bottom: 8px; }
-  #placeholder-out p { font-size: 0.82rem; }
+  #perf-badge { position:absolute; bottom:8px; right:8px; background:#00000099; color:#34d399; font-size:.7rem; padding:3px 8px; border-radius:12px; font-weight:600; display:none; }
+  #placeholder-out { text-align:center; color:#444; }
+  #placeholder-out .big { font-size:2.5rem; margin-bottom:8px; }
+  #placeholder-out p { font-size:.82rem; }
 </style>
 </head>
 <body>
@@ -176,7 +64,6 @@
 </header>
 
 <main>
-  <!-- Painel esquerdo -->
   <div class="panel">
     <div class="card">
       <h2>Rosto Fonte</h2>
@@ -199,7 +86,7 @@
 
     <div class="card">
       <h2>Como usar</h2>
-      <ol style="font-size:0.78rem;color:#888;line-height:2;padding-left:16px">
+      <ol style="font-size:.78rem;color:#888;line-height:2;padding-left:16px">
         <li>Faça upload de uma foto</li>
         <li>Clique em Iniciar Câmera</li>
         <li>Veja o resultado ao vivo</li>
@@ -207,7 +94,6 @@
     </div>
   </div>
 
-  <!-- Webcam original -->
   <div class="video-wrap">
     <div class="video-header">
       <div class="dot" id="dot-cam"></div>
@@ -215,11 +101,10 @@
     </div>
     <div class="video-body">
       <video id="webcam" autoplay playsinline muted></video>
-      <canvas id="capture-canvas" width="640" height="480"></canvas>
+      <canvas id="capture-canvas" width="320" height="240"></canvas>
     </div>
   </div>
 
-  <!-- Resultado do swap -->
   <div class="video-wrap">
     <div class="video-header">
       <div class="dot" id="dot-out"></div>
@@ -237,16 +122,13 @@
 </main>
 
 <script>
-  // Deixa Socket.IO escolher o melhor transporte (polling → websocket)
-  const socket = io();
-
-  // Indicador de conexão
+  const socket    = io({ transports: ['websocket', 'polling'] });
   const statusBar = document.getElementById('status-bar');
-  socket.on('connect',    () => { statusBar.style.color = '#4ade80'; statusBar.textContent = 'Conectado ao servidor'; });
-  socket.on('disconnect', () => { statusBar.style.color = '#f87171'; statusBar.textContent = 'Desconectado'; });
-  socket.on('connect_error', e => { statusBar.style.color = '#f87171'; statusBar.textContent = 'Erro de conexao: ' + e.message; });
 
-  // ── Status do modelo ──────────────────────────────────────────────────
+  socket.on('connect',       () => { statusBar.style.color='#4ade80'; statusBar.textContent='Conectado'; });
+  socket.on('disconnect',    () => { statusBar.style.color='#f87171'; statusBar.textContent='Desconectado'; });
+  socket.on('connect_error', e => { statusBar.style.color='#f87171'; statusBar.textContent='Erro: '+e.message; });
+
   let modelReady = false;
   async function pollStatus() {
     try {
@@ -258,11 +140,11 @@
   pollStatus();
   setInterval(pollStatus, 3000);
 
-  // ── Upload face ───────────────────────────────────────────────────────
+  // ── Upload face ──────────────────────────────────────────────
   const dropZone = document.getElementById('drop-zone');
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); uploadFace(e.dataTransfer.files[0]); });
+  dropZone.addEventListener('drop',      e => { e.preventDefault(); dropZone.classList.remove('drag-over'); uploadFace(e.dataTransfer.files[0]); });
   document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) uploadFace(e.target.files[0]); });
 
   function uploadFace(file) {
@@ -276,35 +158,28 @@
     };
     reader.readAsDataURL(file);
   }
-
   socket.on('upload_result', d => showMsg(d.msg, d.ok));
 
   function showMsg(msg, ok) {
     const el = document.getElementById('upload-msg');
-    el.textContent = msg;
-    el.className = ok === null ? '' : (ok ? 'ok' : 'err');
+    el.textContent = msg; el.className = ok === null ? '' : (ok ? 'ok' : 'err');
     el.style.display = 'block';
   }
-
   function clearFace() {
     socket.emit('clear_face');
     document.getElementById('face-preview').style.display = 'none';
-    document.getElementById('upload-msg').style.display = 'none';
+    document.getElementById('upload-msg').style.display   = 'none';
   }
 
-  // ── Camera ────────────────────────────────────────────────────────────
-  let streaming = false;
-  let stream    = null;
+  // ── Camera ───────────────────────────────────────────────────
+  let streaming = false, stream = null, sendTimer = null;
 
   async function toggleCamera() {
     if (!streaming) await startCamera(); else stopCamera();
   }
-
   async function startCamera() {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
-      });
+      stream = await navigator.mediaDevices.getUserMedia({ video:{ width:640, height:480, facingMode:'user' } });
       const video = document.getElementById('webcam');
       video.srcObject = stream;
       await video.play();
@@ -313,65 +188,45 @@
       document.getElementById('dot-cam').classList.add('live');
       document.getElementById('dot-out').classList.add('live');
       document.getElementById('perf-badge').style.display = 'block';
-      sendLoop();
-    } catch (e) {
-      alert('Erro ao acessar webcam: ' + e.message);
-    }
+      // Envia a cada 150ms sem esperar resposta — servidor descarta se estiver ocupado
+      sendTimer = setInterval(captureAndSend, 150);
+    } catch(e) { alert('Erro ao acessar webcam: ' + e.message); }
   }
-
   function stopCamera() {
     streaming = false;
+    clearInterval(sendTimer);
     if (stream) stream.getTracks().forEach(t => t.stop());
     document.getElementById('btn-cam').textContent = '▶ Iniciar Câmera';
     document.getElementById('dot-cam').classList.remove('live');
     document.getElementById('dot-out').classList.remove('live');
   }
 
-  // ── Frame loop ────────────────────────────────────────────────────────
-  const canvas  = document.getElementById('capture-canvas');
-  const ctx     = canvas.getContext('2d');
-  const output  = document.getElementById('output');
-  const placeholder = document.getElementById('placeholder-out');
-
-  let waitingResult  = false;
-  let waitingSince   = 0;
-  const TIMEOUT_MS   = 5000;   // desbloqueia se servidor não responder em 5s
-  let frameCount     = 0;
-  let fpsT0          = performance.now();
-
-  function sendLoop() {
-    if (!streaming) return;
-    // Destrava se servidor demorar demais (ex: modelo ainda carregando)
-    if (waitingResult && (performance.now() - waitingSince) > TIMEOUT_MS) {
-      waitingResult = false;
-    }
-    if (!waitingResult && socket.connected) captureAndSend();
-    requestAnimationFrame(sendLoop);
-  }
+  // ── Frame loop ───────────────────────────────────────────────
+  const canvas = document.getElementById('capture-canvas');
+  const ctx    = canvas.getContext('2d');
+  const output = document.getElementById('output');
 
   function captureAndSend() {
+    if (!socket.connected) return;
     const video = document.getElementById('webcam');
     if (video.readyState < 2) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const data = canvas.toDataURL('image/jpeg', 0.75);
-    waitingResult = true;
-    waitingSince  = performance.now();
-    socket.emit('frame', data);
+    // captura em 320×240 — 4× menos dados por frame
+    ctx.drawImage(video, 0, 0, 320, 240);
+    socket.emit('frame', canvas.toDataURL('image/jpeg', 0.6));
   }
 
+  let frameCount = 0, fpsT0 = performance.now();
   socket.on('result', data => {
     output.src = data;
     output.style.display = 'block';
-    placeholder.style.display = 'none';
-    waitingResult = false;
+    document.getElementById('placeholder-out').style.display = 'none';
 
     frameCount++;
     const now = performance.now();
     if (now - fpsT0 >= 2000) {
       const fps = (frameCount / ((now - fpsT0) / 1000)).toFixed(1);
-      document.getElementById('perf-badge').textContent = `${fps} FPS (GPU)`;
-      frameCount = 0;
-      fpsT0 = now;
+      document.getElementById('perf-badge').textContent = `${fps} FPS`;
+      frameCount = 0; fpsT0 = now;
     }
   });
 </script>

@@ -1,12 +1,9 @@
-"""
-Servidor Flask para rodar no Google Colab com GPU.
-Usa Socket.IO + eventlet para receber frames do browser e devolver o resultado.
-"""
 import os
 import base64
+import threading
 import cv2
 import numpy as np
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 from face_swap_gpu import FaceSwapperGPU
 
@@ -16,11 +13,13 @@ socketio = SocketIO(
     app,
     cors_allowed_origins="*",
     async_mode="threading",
-    max_http_buffer_size=5 * 1024 * 1024,
+    max_http_buffer_size=2 * 1024 * 1024,
     ping_timeout=60,
     ping_interval=25,
 )
-swapper  = FaceSwapperGPU()
+swapper     = FaceSwapperGPU()
+_busy       = False
+_busy_lock  = threading.Lock()
 
 
 @app.route("/")
@@ -35,26 +34,32 @@ def status():
 
 @socketio.on("frame")
 def handle_frame(data):
-    """Recebe frame JPEG em base64, processa, devolve resultado."""
+    global _busy
+    # Descarta frame se ainda processando o anterior — evita fila que atrasa tudo
+    with _busy_lock:
+        if _busy:
+            return
+        _busy = True
+
     try:
         img_bytes = base64.b64decode(data.split(",")[1])
-        nparr     = np.frombuffer(img_bytes, np.uint8)
-        frame     = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        frame     = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             return
 
         result = swapper.process_frame(frame)
 
-        _, buf      = cv2.imencode(".jpg", result, [cv2.IMWRITE_JPEG_QUALITY, 82])
-        result_b64  = "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
-        emit("result", result_b64)
+        _, buf = cv2.imencode(".jpg", result, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        emit("result", "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode())
     except Exception as e:
         print(f"[frame] {e}")
+    finally:
+        with _busy_lock:
+            _busy = False
 
 
 @socketio.on("upload_face")
 def handle_upload(data):
-    """Recebe foto do rosto fonte em base64."""
     try:
         img_bytes = base64.b64decode(data.split(",")[1])
         ok, msg   = swapper.set_source_face(img_bytes)
