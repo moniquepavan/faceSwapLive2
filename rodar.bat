@@ -1,9 +1,9 @@
 @echo off
 echo Iniciando Face Swap Live...
-echo Abrindo http://localhost:5000
-echo Pressione Ctrl+C para encerrar.
 echo.
 
-start "" http://localhost:5000
+:: Aguarda 2s e abre o navegador automaticamente
+start "" /b cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:5000"
+
 venv\Scripts\python app.py
 pause

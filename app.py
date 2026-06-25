@@ -3,6 +3,11 @@ import threading
 import queue
 import time
 from flask import Flask, Response, render_template, request, jsonify
+
+# Baixa o modelo automaticamente se nao existir
+import baixar_modelo
+baixar_modelo.main(silent=True)
+
 from face_swap import FaceSwapper
 
 app = Flask(__name__)
