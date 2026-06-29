@@ -13,7 +13,23 @@ SOURCES = [
 ]
 
 
+def _ensure_buffalo_sc(silent=False):
+    """Baixa o detector buffalo_sc (det_500m.onnx) se faltar.
+    O FaceAnalysis baixa o buffalo_l sozinho, mas o buffalo_sc e carregado
+    por caminho direto em face_swap.py e precisa ser baixado a parte."""
+    det = os.path.join(os.path.expanduser("~"), ".insightface", "models",
+                       "buffalo_sc", "det_500m.onnx")
+    if os.path.exists(det):
+        return
+    if not silent:
+        print("Baixando detector buffalo_sc (~15 MB)...")
+    from insightface.utils import storage
+    storage.ensure_available("models", "buffalo_sc")
+
+
 def main(silent=False):
+    _ensure_buffalo_sc(silent)
+
     if os.path.exists(DEST) and os.path.getsize(DEST) > 50_000_000:
         if not silent:
             print(f"Modelo ja existe ({os.path.getsize(DEST)/1e6:.0f} MB). OK!")

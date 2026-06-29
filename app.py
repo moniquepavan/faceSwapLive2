@@ -1,8 +1,13 @@
 import cv2
+import os
+import sys
 import threading
 import queue
 import time
 from flask import Flask, Response, render_template, request, jsonify
+
+# Backend de captura por plataforma: AVFoundation no macOS, DirectShow no Windows
+_CAM_BACKEND = cv2.CAP_AVFOUNDATION if sys.platform == "darwin" else cv2.CAP_DSHOW
 
 # Baixa o modelo automaticamente se nao existir
 import baixar_modelo
@@ -157,7 +162,7 @@ def start_camera():
 
     with _camera_lock:
         if _camera is None:
-            _camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            _camera = cv2.VideoCapture(0, _CAM_BACKEND)
             _camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             _camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             _camera.set(cv2.CAP_PROP_FPS, 30)
@@ -195,6 +200,7 @@ def video_feed():
 
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "5000"))
     print("\nFace Swap Live iniciando...")
-    print("   Abra: http://localhost:5000\n")
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    print(f"   Abra: http://localhost:{port}\n")
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

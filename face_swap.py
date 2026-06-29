@@ -18,9 +18,16 @@ _CPU_PROVIDERS = ["CPUExecutionProvider"]
 
 def _best_providers():
     available = ort.get_available_providers()
-    for p in ["CUDAExecutionProvider", "DmlExecutionProvider"]:
-        if p in available:
-            return [p, "CPUExecutionProvider"]
+    if "CUDAExecutionProvider" in available:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if "DmlExecutionProvider" in available:
+        return ["DmlExecutionProvider", "CPUExecutionProvider"]
+    if "CoreMLExecutionProvider" in available:
+        # MLProgram + GPU: ~11x mais rapido que o CoreML legado (NeuralNetwork)
+        # no Apple Silicon, que so suporta 34/273 nos do inswapper.
+        return [("CoreMLExecutionProvider",
+                 {"ModelFormat": "MLProgram", "MLComputeUnits": "CPUAndGPU"}),
+                "CPUExecutionProvider"]
     return _CPU_PROVIDERS
 
 _SWAP_PROVIDERS = _best_providers()
@@ -61,7 +68,9 @@ class FaceSwapper:
             self.source_analyzer = FaceAnalysis(name="buffalo_l", providers=_CPU_PROVIDERS)
             self.source_analyzer.prepare(ctx_id=0, det_size=(320, 320))
 
-            self.status = f"Carregando inswapper ({_SWAP_PROVIDERS[0]})..."
+            _prov0 = _SWAP_PROVIDERS[0]
+            _prov0 = _prov0[0] if isinstance(_prov0, tuple) else _prov0
+            self.status = f"Carregando inswapper ({_prov0})..."
             self.swapper = insightface.model_zoo.get_model(
                 MODEL_PATH, providers=_SWAP_PROVIDERS
             )
@@ -74,6 +83,8 @@ class FaceSwapper:
                 gpu = "NVIDIA GPU (CUDA)"
             elif "DmlExecutionProvider" in used:
                 gpu = "Intel/AMD GPU (DirectML)"
+            elif "CoreMLExecutionProvider" in used:
+                gpu = "Apple GPU (CoreML)"
             else:
                 gpu = "CPU"
             self.ready  = True
